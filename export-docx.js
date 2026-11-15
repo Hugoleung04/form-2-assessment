@@ -370,7 +370,7 @@ async function exportFilledDocx(payload) {
     const titleish = next.replace(/\s+/g, " ").trim();
     if (titleish === "( – )" || titleish === "(–)" || titleish === "(-)") {
       const inner = [location, treeId].filter(Boolean).join(" – ");
-      if (inner) next = `( ${inner} )`;
+      if (inner) next = `(${inner})`;
     }
     return next === text ? p : setParagraphPlainText(p, next);
   });

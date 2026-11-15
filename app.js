@@ -830,6 +830,99 @@ async function openTree(id) {
   await renderTreePhotos(tree);
 }
 
+const COMMON_NEARBY = [
+  "footpath",
+  "traffic road",
+  "building",
+  "playground",
+  "car park",
+  "pedestrian walkway",
+  "cycle track",
+  "sitting-out area",
+  "park",
+  "school",
+  "residential area",
+  "bus stop",
+  "open space",
+];
+
+const COMMON_TARGETS = [
+  "pedestrians",
+  "vehicles",
+  "building",
+  "cyclists",
+  "park users",
+  "students",
+  "residents",
+  "passers-by",
+  "road users",
+  "property",
+];
+
+function loadHistory(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(key, value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v) return;
+  const list = loadHistory(key);
+  const next = [v, ...list.filter((x) => x !== v)].slice(0, 30);
+  localStorage.setItem(key, JSON.stringify(next));
+}
+
+function fillDatalist(listId, values) {
+  const dl = document.getElementById(listId);
+  if (!dl) return;
+  const uniq = [...new Set(values.map((v) => String(v || "").trim()).filter(Boolean))];
+  dl.innerHTML = uniq.map((v) => `<option value="${escapeHtml(v)}"></option>`).join("");
+}
+
+function renderChips(containerId, common, history, inputId) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const seen = new Set();
+  const items = [];
+  for (const v of [...common, ...history]) {
+    const s = String(v || "").trim().toLowerCase();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    items.push({ v: s, hist: history.includes(s) });
+  }
+  box.innerHTML = items
+    .map(
+      (it) =>
+        `<button type="button" class="chip${it.hist ? " chip-hist" : ""}" data-val="${escapeHtml(it.v)}">${escapeHtml(it.v)}</button>`
+    )
+    .join("");
+  box.querySelectorAll(".chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById(inputId);
+      if (input) {
+        input.value = btn.getAttribute("data-val") || "";
+        input.dispatchEvent(new Event("change"));
+        saveTreeFields();
+      }
+      box.querySelectorAll(".chip").forEach((c) => c.classList.remove("selected"));
+      btn.classList.add("selected");
+    });
+  });
+}
+
+function refreshSuggestionLists() {
+  const siteHist = loadHistory("f2-site-history");
+  const nearbyHist = loadHistory("f2-nearby-history");
+  const targetsHist = loadHistory("f2-targets-history");
+  fillDatalist("siteHistory", siteHist);
+  renderChips("nearbyChips", COMMON_NEARBY, nearbyHist, "f-nearby");
+  renderChips("targetsChips", COMMON_TARGETS, targetsHist, "f-targets");
+}
+
 function buildCommentsText(treeId, species, site, nearby, targets) {
   const id = treeId || "—";
   const sp = species || "—";
@@ -859,8 +952,8 @@ function readTreeForm() {
     treeId: read("f-treeId").trim(),
     species: read("f-species").trim(),
     site: read("f-site").trim(),
-    nearby: read("f-nearby").trim(),
-    targets: read("f-targets").trim(),
+    nearby: read("f-nearby").trim().toLowerCase(),
+    targets: read("f-targets").trim().toLowerCase(),
     inspector: read("f-inspector").trim(),
     date: read("f-date"),
     notes: read("f-notes").trim(),
@@ -878,6 +971,10 @@ async function saveTreeFields() {
   tree.site = form.site || tree.site || "";
   tree.nearby = form.nearby || tree.nearby || "";
   tree.targets = form.targets || tree.targets || "";
+  if (tree.site) saveHistory("f2-site-history", tree.site);
+  if (tree.nearby) saveHistory("f2-nearby-history", tree.nearby);
+  if (tree.targets) saveHistory("f2-targets-history", tree.targets);
+  refreshSuggestionLists();
   tree.inspector = form.inspector || tree.inspector || "";
   tree.date = form.date || tree.date || "";
   tree.notes = form.notes || tree.notes || "";
@@ -1363,6 +1460,7 @@ async function exportJson() {
 async function init() {
   db = await openDb();
   applyI18n();
+  refreshSuggestionLists();
   wireSpeciesPicker();
   document.getElementById("langBtn").addEventListener("click", toggleLang);
   document.getElementById("btnNew").addEventListener("click", newTree);
@@ -1391,6 +1489,23 @@ async function init() {
       saveTreeFields();
     });
   }
+  ["f-nearby", "f-targets"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("blur", () => {
+      el.value = el.value.trim().toLowerCase();
+    });
+  });
+  document.querySelectorAll("[data-chip-toggle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-chip-toggle");
+      const box = document.getElementById(id);
+      if (!box) return;
+      const show = box.hidden;
+      box.hidden = !show;
+      btn.textContent = show ? "Hide options" : "Show options";
+    });
+  });
 
   document.getElementById("fileTreePhoto").addEventListener("change", async (e) => {
     const f = e.target.files && e.target.files[0];

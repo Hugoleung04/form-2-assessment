@@ -55,15 +55,24 @@
         </div>
         <div class="field">
           <label data-i18n="site">Site / location</label>
-          <input id="f-site" autocomplete="off">
+          <input id="f-site" autocomplete="off" list="siteHistory">
+          <datalist id="siteHistory"></datalist>
         </div>
         <div class="field">
-          <label data-i18n="nearby">Nearby environment (附近環境)</label>
-          <input id="f-nearby" autocomplete="off" placeholder="e.g. footpath, building, playground">
+          <div class="row spread" style="align-items:center;margin-bottom:4px">
+            <label data-i18n="nearby" style="margin:0">Nearby environment (附近環境)</label>
+            <button class="btn secondary" type="button" data-chip-toggle="nearbyChips" style="width:auto;min-height:32px;padding:4px 10px;font-size:13px">Show options</button>
+          </div>
+          <input id="f-nearby" autocomplete="off" placeholder="or type your own">
+          <div class="chip-box" id="nearbyChips" hidden></div>
         </div>
         <div class="field">
-          <label data-i18n="targets">Targets (目標)</label>
-          <input id="f-targets" autocomplete="off" placeholder="e.g. pedestrians, vehicles, building">
+          <div class="row spread" style="align-items:center;margin-bottom:4px">
+            <label data-i18n="targets" style="margin:0">Targets (目標)</label>
+            <button class="btn secondary" type="button" data-chip-toggle="targetsChips" style="width:auto;min-height:32px;padding:4px 10px;font-size:13px">Show options</button>
+          </div>
+          <input id="f-targets" autocomplete="off" placeholder="or type your own">
+          <div class="chip-box" id="targetsChips" hidden></div>
         </div>
         <div class="grid-2">
           <div class="field">
