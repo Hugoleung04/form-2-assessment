@@ -54,9 +54,12 @@
           <div class="suggest" id="speciesSuggest" hidden></div>
         </div>
         <div class="field">
-          <label data-i18n="site">Site / location</label>
-          <input id="f-site" autocomplete="off" list="siteHistory">
-          <datalist id="siteHistory"></datalist>
+          <div class="row spread" style="align-items:center;margin-bottom:4px">
+            <label data-i18n="site" style="margin:0">Site / location</label>
+            <button class="btn secondary" type="button" data-chip-toggle="siteChips" style="width:auto;min-height:32px;padding:4px 10px;font-size:13px">Show options</button>
+          </div>
+          <input id="f-site" autocomplete="off" placeholder="or type your own">
+          <div class="chip-box" id="siteChips" hidden></div>
         </div>
         <div class="field">
           <div class="row spread" style="align-items:center;margin-bottom:4px">

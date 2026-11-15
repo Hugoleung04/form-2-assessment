@@ -422,8 +422,21 @@ function showSpeciesSuggest(query) {
       </button>`;
     })
     .join("");
+
+  let scrolled = false;
+  let startY = 0;
+  box.onpointerdown = (e) => { startY = e.clientY; scrolled = false; };
+  box.onpointermove = (e) => {
+    if (Math.abs(e.clientY - startY) > 8) scrolled = true;
+  };
+
   box.querySelectorAll("[data-species-i]").forEach((btn) => {
-    const pick = (e) => {
+    btn.addEventListener("click", (e) => {
+      if (scrolled) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       const item = matches[Number(btn.getAttribute("data-species-i"))];
@@ -431,9 +444,7 @@ function showSpeciesSuggest(query) {
       input.value = speciesLabel(item);
       hideSpeciesSuggest();
       input.blur();
-    };
-    btn.addEventListener("pointerdown", pick);
-    btn.addEventListener("click", pick);
+    });
   });
 }
 
@@ -827,6 +838,7 @@ async function openTree(id) {
   document.getElementById("gpsLabel").textContent = tree.gps
     ? `${tree.gps.lat.toFixed(6)}, ${tree.gps.lng.toFixed(6)}`
     : t("gpsOff");
+  refreshSuggestionLists();
   await renderTreePhotos(tree);
 }
 
@@ -902,14 +914,16 @@ function renderChips(containerId, common, history, inputId) {
     seen.add(s);
     items.push({ v: s, hist: history.includes(s) });
   }
+  const current = (document.getElementById(inputId)?.value || "").toLowerCase();
   box.innerHTML = items
-    .map(
-      (it) =>
-        `<button type="button" class="chip${it.hist ? " chip-hist" : ""}" data-val="${escapeHtml(it.v)}">${escapeHtml(it.v)}</button>`
-    )
+    .map((it) => {
+      const selected = current.split(/\s*,\s*|\s+and\s+/).some((part) => part.trim() === it.v);
+      return `<button type="button" class="chip${it.hist ? " chip-hist" : ""}${selected ? " selected" : ""}" data-val="${escapeHtml(it.v)}">${escapeHtml(it.v)}</button>`;
+    })
     .join("");
   box.querySelectorAll(".chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
       btn.classList.toggle("selected");
       const selected = [...box.querySelectorAll(".chip.selected")].map((c) => c.getAttribute("data-val"));
       const input = document.getElementById(inputId);
@@ -926,7 +940,7 @@ function refreshSuggestionLists() {
   const siteHist = loadHistory("f2-site-history");
   const nearbyHist = loadHistory("f2-nearby-history");
   const targetsHist = loadHistory("f2-targets-history");
-  fillDatalist("siteHistory", siteHist);
+  renderChips("siteChips", siteHist, [], "f-site");
   renderChips("nearbyChips", COMMON_NEARBY, nearbyHist, "f-nearby");
   renderChips("targetsChips", COMMON_TARGETS, targetsHist, "f-targets");
 }
@@ -982,7 +996,6 @@ async function saveTreeFields() {
   if (tree.site) saveHistory("f2-site-history", tree.site);
   if (tree.nearby) saveHistory("f2-nearby-history", tree.nearby);
   if (tree.targets) saveHistory("f2-targets-history", tree.targets);
-  refreshSuggestionLists();
   tree.inspector = form.inspector || tree.inspector || "";
   tree.date = form.date || tree.date || "";
   tree.notes = form.notes || tree.notes || "";
