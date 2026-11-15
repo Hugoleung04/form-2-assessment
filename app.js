@@ -883,6 +883,14 @@ function fillDatalist(listId, values) {
   dl.innerHTML = uniq.map((v) => `<option value="${escapeHtml(v)}"></option>`).join("");
 }
 
+function joinWithAnd(items) {
+  const arr = items.map((s) => String(s || "").trim()).filter(Boolean);
+  if (!arr.length) return "";
+  if (arr.length === 1) return arr[0];
+  if (arr.length === 2) return arr[0] + " and " + arr[1];
+  return arr.slice(0, -1).join(", ") + ", and " + arr[arr.length - 1];
+}
+
 function renderChips(containerId, common, history, inputId) {
   const box = document.getElementById(containerId);
   if (!box) return;
@@ -902,14 +910,14 @@ function renderChips(containerId, common, history, inputId) {
     .join("");
   box.querySelectorAll(".chip").forEach((btn) => {
     btn.addEventListener("click", () => {
+      btn.classList.toggle("selected");
+      const selected = [...box.querySelectorAll(".chip.selected")].map((c) => c.getAttribute("data-val"));
       const input = document.getElementById(inputId);
       if (input) {
-        input.value = btn.getAttribute("data-val") || "";
+        input.value = joinWithAnd(selected);
         input.dispatchEvent(new Event("change"));
         saveTreeFields();
       }
-      box.querySelectorAll(".chip").forEach((c) => c.classList.remove("selected"));
-      btn.classList.add("selected");
     });
   });
 }

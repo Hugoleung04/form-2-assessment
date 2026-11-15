@@ -439,6 +439,7 @@ footer.hint {
   border-radius: 12px;
   border: 1px solid var(--line-soft);
 }
+.chip-box[hidden] { display: none; }
 .chip {
   background: var(--panel-2);
   border: 1px solid var(--line);
