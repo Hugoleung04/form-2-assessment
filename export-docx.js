@@ -356,31 +356,44 @@ async function exportFilledDocx(payload) {
   const treeId = payload.treeId || "";
   const species = payload.species || "";
   const location = payload.location || payload.site || "";
+  const nearby = payload.nearby || "";
+  const targets = payload.targets || "";
+  const comments = payload.comments || "";
+
   xml = mapParagraphs(xml, (p, text) => {
     let next = text;
-    const compact = next.replace(/\s+/g, "");
-    if (compact === "@1" || next.includes("@1")) next = next.replaceAll("@1", treeId);
-    if (compact === "@2" || next.includes("@2")) next = next.replaceAll("@2", species);
-    if (treeId && next.includes("CW2670")) next = next.replaceAll("CW2670", treeId);
-    if (species && next.includes("Araucaria columnaris")) {
-      next = next.replaceAll("Araucaria columnaris", speciesSciFirst(species));
-    }
+    if (next.includes("{{TREE_ID}}")) next = next.replaceAll("{{TREE_ID}}", treeId || "—");
+    if (next.includes("{{SPECIES}}")) next = next.replaceAll("{{SPECIES}}", speciesSciFirst(species) || "—");
+    if (next.includes("{{SITE}}")) next = next.replaceAll("{{SITE}}", location || "—");
+    if (next.includes("{{NEARBY}}")) next = next.replaceAll("{{NEARBY}}", nearby || "—");
+    if (next.includes("{{TARGETS}}")) next = next.replaceAll("{{TARGETS}}", targets || "—");
     const titleish = next.replace(/\s+/g, " ").trim();
     if (titleish === "( – )" || titleish === "(–)" || titleish === "(-)") {
       const inner = [location, treeId].filter(Boolean).join(" – ");
       if (inner) next = `( ${inner} )`;
     }
-    if (next.includes("Table 2. Information of Resistography Test")) {
-      next = next.replaceAll("Table 2. Information of Resistography Test", "Table 1. Information of Resistography Test");
-    }
-    if (next.includes("(Table 2)")) next = next.replaceAll("(Table 2)", "(Table 1)");
-    if (next.includes("Resistography and Sonic Tomography Analysis")) {
-      next = next.replaceAll("Resistography and Sonic Tomography Analysis", "Resistography Analysis");
-    }
     return next === text ? p : setParagraphPlainText(p, next);
   });
-  xml = xml.replace(/>@1</g, ">" + escapeXml(treeId) + "<");
-  xml = xml.replace(/>@2</g, ">" + escapeXml(species) + "<");
+
+  // If user provided custom comments, replace the three standard paragraphs
+  if (comments && comments.trim()) {
+    const lines = comments.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+    const commentParts = [
+      lines[0] || "",
+      lines[1] || "",
+      lines[2] || "",
+    ];
+    let idx = 0;
+    xml = mapParagraphs(xml, (p, text) => {
+      const plain = text.replace(/\s+/g, " ").trim();
+      if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("In conclusion,")) {
+        const rep = commentParts[idx] || "";
+        idx++;
+        return setParagraphPlainText(p, rep);
+      }
+      return p;
+    });
+  }
 
   function putImage(bytes, filename, wCm, hCm) {
     zip.file("word/media/" + filename, bytes);

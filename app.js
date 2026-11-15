@@ -12,7 +12,10 @@ const I18N = {
     speciesSearch: "Search Chinese or scientific name",
     speciesNone: "No matching species",
     site: "Site / location",
+    nearby: "Nearby environment",
+    targets: "Targets",
     inspector: "Inspector",
+    comments: "Assessment comments",
     notes: "Notes",
     treePhotos: "Tree photos (at least 1)",
     addTreePhoto: "Take / add tree photo",
@@ -91,6 +94,9 @@ const I18N = {
     speciesSearch: "搜尋中文名或學名",
     speciesNone: "沒有符合的樹種",
     site: "地點",
+    nearby: "附近環境",
+    targets: "目標",
+    comments: "評估意見",
     inspector: "檢查員",
     notes: "備註",
     treePhotos: "樹木照片（至少 1 張）",
@@ -789,8 +795,11 @@ async function newTree() {
     treeId: "",
     species: "",
     site: "",
+    nearby: "",
+    targets: "",
     inspector: localStorage.getItem("rf-inspector") || "",
     notes: "",
+    comments: "",
     date: new Date().toISOString().slice(0, 10),
     gps: null,
     treePhotoIds: [],
@@ -809,13 +818,36 @@ async function openTree(id) {
   document.getElementById("f-treeId").value = tree.treeId || "";
   document.getElementById("f-species").value = tree.species || "";
   document.getElementById("f-site").value = tree.site || "";
+  document.getElementById("f-nearby").value = tree.nearby || "";
+  document.getElementById("f-targets").value = tree.targets || "";
   document.getElementById("f-inspector").value = tree.inspector || "";
   document.getElementById("f-date").value = tree.date || "";
   document.getElementById("f-notes").value = tree.notes || "";
+  document.getElementById("f-comments").value = tree.comments || buildCommentsText(tree.treeId, tree.species, tree.site, tree.nearby, tree.targets);
   document.getElementById("gpsLabel").textContent = tree.gps
     ? `${tree.gps.lat.toFixed(6)}, ${tree.gps.lng.toFixed(6)}`
     : t("gpsOff");
   await renderTreePhotos(tree);
+}
+
+function buildCommentsText(treeId, species, site, nearby, targets) {
+  const id = treeId || "—";
+  const sp = species || "—";
+  const s = site || "—";
+  const n = nearby || "—";
+  const t = targets || "—";
+  return (
+    `The inspected tree (${id}) is an ${sp} situated in the landscape area at ${s}. The tree is next to ${n}, which is considered frequently used. The targets of the tree cover ${t}.\n\n` +
+    `The overall condition of the tree was normal at the time of inspection, as evidenced by typical color, size, and density of the foliage. Structurally, no significant defects were observed along the main trunk and branches.\n\n` +
+    `In conclusion, the overall health and structural condition of the tree are considered acceptable. No mitigation measure is needed at current stage.`
+  );
+}
+
+function refreshCommentsFromFields() {
+  const form = readTreeForm();
+  const el = document.getElementById("f-comments");
+  if (!el) return;
+  el.value = buildCommentsText(form.treeId, form.species, form.site, form.nearby, form.targets);
 }
 
 function readTreeForm() {
@@ -827,9 +859,12 @@ function readTreeForm() {
     treeId: read("f-treeId").trim(),
     species: read("f-species").trim(),
     site: read("f-site").trim(),
+    nearby: read("f-nearby").trim(),
+    targets: read("f-targets").trim(),
     inspector: read("f-inspector").trim(),
     date: read("f-date"),
     notes: read("f-notes").trim(),
+    comments: read("f-comments").trim(),
   };
 }
 
@@ -841,9 +876,12 @@ async function saveTreeFields() {
   tree.treeId = form.treeId || tree.treeId || "";
   tree.species = form.species || tree.species || "";
   tree.site = form.site || tree.site || "";
+  tree.nearby = form.nearby || tree.nearby || "";
+  tree.targets = form.targets || tree.targets || "";
   tree.inspector = form.inspector || tree.inspector || "";
   tree.date = form.date || tree.date || "";
   tree.notes = form.notes || tree.notes || "";
+  tree.comments = form.comments || tree.comments || "";
   tree.updatedAt = Date.now();
   if (tree.inspector) localStorage.setItem("rf-inspector", tree.inspector);
   await putTree(tree);
@@ -1199,6 +1237,9 @@ async function exportReport() {
       treeId,
       species,
       location: form.site || tree.site || "",
+      nearby: form.nearby || tree.nearby || "",
+      targets: form.targets || tree.targets || "",
+      comments: form.comments || tree.comments || "",
       treePhoto,
       treePhotos,
     });
@@ -1336,13 +1377,20 @@ async function init() {
   document.getElementById("btnGps").addEventListener("click", captureGps);
   document.getElementById("btnDeleteTree").addEventListener("click", deleteCurrentTree);
   document.getElementById("btnExport").addEventListener("click", exportReport);
-  ["f-treeId", "f-species", "f-site", "f-inspector", "f-date", "f-notes"].forEach((id) => {
+  ["f-treeId", "f-species", "f-site", "f-nearby", "f-targets", "f-inspector", "f-date", "f-notes", "f-comments"].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("change", () => saveTreeFields());
     el.addEventListener("blur", () => saveTreeFields());
   });
   document.getElementById("btnJson").addEventListener("click", exportJson);
+  const refreshBtn = document.getElementById("btnRefreshComments");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      refreshCommentsFromFields();
+      saveTreeFields();
+    });
+  }
 
   document.getElementById("fileTreePhoto").addEventListener("change", async (e) => {
     const f = e.target.files && e.target.files[0];

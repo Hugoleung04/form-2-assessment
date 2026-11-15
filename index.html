@@ -57,6 +57,14 @@
           <label data-i18n="site">Site / location</label>
           <input id="f-site" autocomplete="off">
         </div>
+        <div class="field">
+          <label data-i18n="nearby">Nearby environment (附近環境)</label>
+          <input id="f-nearby" autocomplete="off" placeholder="e.g. footpath, building, playground">
+        </div>
+        <div class="field">
+          <label data-i18n="targets">Targets (目標)</label>
+          <input id="f-targets" autocomplete="off" placeholder="e.g. pedestrians, vehicles, building">
+        </div>
         <div class="grid-2">
           <div class="field">
             <label data-i18n="inspector">Inspector</label>
@@ -70,6 +78,14 @@
         <div class="field">
           <label data-i18n="notes">Notes</label>
           <textarea id="f-notes"></textarea>
+        </div>
+        <div class="field">
+          <div class="row spread" style="align-items:center;margin-bottom:6px">
+            <label data-i18n="comments" style="margin:0">Assessment comments</label>
+            <button class="btn secondary" id="btnRefreshComments" type="button" style="width:auto;min-height:36px;padding:6px 10px;font-size:13px">Refresh from fields</button>
+          </div>
+          <textarea id="f-comments" rows="8" style="min-height:140px"></textarea>
+          <p class="help" style="margin-top:6px">“1” = site, “2” = nearby, “3” = targets. You can edit freely before export.</p>
         </div>
         <div class="row spread" style="margin-bottom:10px">
           <span class="status-pill" id="gpsLabel">No GPS yet</span>
