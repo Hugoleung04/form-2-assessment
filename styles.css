@@ -357,6 +357,7 @@ label { display: block; font-size: 0.82rem; color: var(--accent-2); margin-botto
   border-radius: 12px;
   z-index: 100;
   box-shadow: 0 12px 32px rgba(0,0,0,.55);
+  touch-action: pan-y;
 }
 .suggest.open { display: block; }
 .suggest-item {

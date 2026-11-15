@@ -423,16 +423,20 @@ function showSpeciesSuggest(query) {
     })
     .join("");
 
-  let scrolled = false;
-  let startY = 0;
-  box.onpointerdown = (e) => { startY = e.clientY; scrolled = false; };
-  box.onpointermove = (e) => {
-    if (Math.abs(e.clientY - startY) > 8) scrolled = true;
+  // Track touch movement so scrolling doesn't select
+  let touchStartY = 0;
+  let moved = false;
+  box.ontouchstart = (e) => {
+    touchStartY = e.touches[0].clientY;
+    moved = false;
+  };
+  box.ontouchmove = (e) => {
+    if (Math.abs(e.touches[0].clientY - touchStartY) > 6) moved = true;
   };
 
   box.querySelectorAll("[data-species-i]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      if (scrolled) {
+      if (moved) {
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -915,21 +919,23 @@ function renderChips(containerId, common, history, inputId) {
     items.push({ v: s, hist: history.includes(s) });
   }
   const current = (document.getElementById(inputId)?.value || "").toLowerCase();
+  const currentParts = current.split(/\s*,\s*|\s+and\s+/).map((p) => p.trim()).filter(Boolean);
   box.innerHTML = items
     .map((it) => {
-      const selected = current.split(/\s*,\s*|\s+and\s+/).some((part) => part.trim() === it.v);
+      const selected = currentParts.includes(it.v);
       return `<button type="button" class="chip${it.hist ? " chip-hist" : ""}${selected ? " selected" : ""}" data-val="${escapeHtml(it.v)}">${escapeHtml(it.v)}</button>`;
     })
     .join("");
   box.querySelectorAll(".chip").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       btn.classList.toggle("selected");
       const selected = [...box.querySelectorAll(".chip.selected")].map((c) => c.getAttribute("data-val"));
       const input = document.getElementById(inputId);
       if (input) {
         input.value = joinWithAnd(selected);
-        input.dispatchEvent(new Event("change"));
+        // Don't dispatch change here to avoid extra save loops; just save directly
         saveTreeFields();
       }
     });
