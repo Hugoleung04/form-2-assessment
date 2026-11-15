@@ -349,13 +349,13 @@ label { display: block; font-size: 0.82rem; color: var(--accent-2); margin-botto
   left: 0;
   right: 0;
   top: calc(100% + 4px);
-  max-height: min(50vh, 280px);
+  max-height: min(70vh, 420px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: #0c1812;
   border: 1px solid var(--line);
   border-radius: 12px;
-  z-index: 100;
+  z-index: 200;
   box-shadow: 0 12px 32px rgba(0,0,0,.55);
   touch-action: pan-y;
 }

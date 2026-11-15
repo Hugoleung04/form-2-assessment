@@ -17,6 +17,12 @@ function escapeXml(s) {
     .replace(/"/g, "&quot;");
 }
 
+function capitalizeFirst(s) {
+  const t = String(s || "").trim();
+  if (!t) return "";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function speciesSciFirst(label) {
   const s = String(label || "").trim();
   const m = s.match(/^(.*)\(([^)]+)\)\s*$/);
@@ -369,7 +375,8 @@ async function exportFilledDocx(payload) {
     if (next.includes("{{TARGETS}}")) next = next.replaceAll("{{TARGETS}}", targets || "—");
     const titleish = next.replace(/\s+/g, " ").trim();
     if (titleish === "( – )" || titleish === "(–)" || titleish === "(-)") {
-      const inner = [location, treeId].filter(Boolean).join(" – ");
+      const loc = capitalizeFirst(location);
+      const inner = [loc, treeId].filter(Boolean).join(" – ");
       if (inner) next = `(${inner})`;
     }
     return next === text ? p : setParagraphPlainText(p, next);

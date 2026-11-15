@@ -375,7 +375,7 @@ function speciesLabel(item) {
 function filterSpecies(query) {
   const list = Array.isArray(window.SPECIES_LIST) ? window.SPECIES_LIST : [];
   const q = (query || "").trim().toLowerCase();
-  if (!q) return list.slice(0, 50);
+  if (!q) return list;
   const exact = [];
   const start = [];
   const mid = [];
@@ -387,7 +387,7 @@ function filterSpecies(query) {
     else if (chi.startsWith(q) || sci.startsWith(q)) start.push(item);
     else if (hay.includes(q)) mid.push(item);
   }
-  return exact.concat(start, mid).slice(0, 50);
+  return exact.concat(start, mid).slice(0, 80);
 }
 
 function hideSpeciesSuggest() {
@@ -1028,6 +1028,13 @@ async function moveTreePhoto(pid, delta) {
   await renderTreePhotos(tree);
 }
 
+const PHOTO_CAPTION_OPTIONS = [
+  "Whole view",
+  "Crown condition",
+  "Trunk condition",
+  "Trunk base condition",
+];
+
 async function renderTreePhotos(tree) {
   const wrap = document.getElementById("treePhotos");
   wrap.innerHTML = "";
@@ -1046,7 +1053,12 @@ async function renderTreePhotos(tree) {
         <button type="button" class="mini" data-act="next" ${i === ids.length - 1 ? "disabled" : ""}>${t("moveNext")}</button>
       </div>
       <img src="${url}" alt="">
-      <input class="caption-input" type="text" maxlength="120" placeholder="${escapeHtml(t("photoCaption"))}" value="${escapeHtml(cap)}">`;
+      <div class="row spread" style="align-items:center;margin:6px 0 4px">
+        <span class="small muted">${escapeHtml(t("photoCaption"))}</span>
+        <button type="button" class="btn secondary" data-cap-toggle style="width:auto;min-height:28px;padding:2px 8px;font-size:12px">Show options</button>
+      </div>
+      <input class="caption-input" type="text" maxlength="120" placeholder="${escapeHtml(t("photoCaption"))}" value="${escapeHtml(cap)}">
+      <div class="chip-box" data-cap-chips hidden></div>`;
     const img = slot.querySelector("img");
     const input = slot.querySelector("input");
     img.addEventListener("click", async () => {
@@ -1077,6 +1089,30 @@ async function renderTreePhotos(tree) {
     };
     input.addEventListener("change", saveCap);
     input.addEventListener("blur", saveCap);
+
+    const capToggle = slot.querySelector("[data-cap-toggle]");
+    const capChips = slot.querySelector("[data-cap-chips]");
+    const currentParts = cap.toLowerCase().split(/\s*,\s*|\s+and\s+/).map((p) => p.trim()).filter(Boolean);
+    capChips.innerHTML = PHOTO_CAPTION_OPTIONS.map((opt) => {
+      const sel = currentParts.includes(opt.toLowerCase()) ? " selected" : "";
+      return `<button type="button" class="chip${sel}" data-val="${opt}">${opt}</button>`;
+    }).join("");
+    capToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const show = capChips.hidden;
+      capChips.hidden = !show;
+      capToggle.textContent = show ? "Hide options" : "Show options";
+    });
+    capChips.querySelectorAll(".chip").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        btn.classList.toggle("selected");
+        const selected = [...capChips.querySelectorAll(".chip.selected")].map((c) => c.getAttribute("data-val"));
+        input.value = joinWithAnd(selected);
+        saveCap();
+      });
+    });
+
     wrap.appendChild(slot);
   }
 }
