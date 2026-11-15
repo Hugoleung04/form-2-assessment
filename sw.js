@@ -1,4 +1,4 @@
-const CACHE = "form2-assessment-v7";
+const CACHE = "form2-assessment-v8";
 const ASSETS = [
   "./",
   "./index.html",

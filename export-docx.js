@@ -383,6 +383,7 @@ async function exportFilledDocx(payload) {
   });
 
   // If user provided custom comments, replace the three standard paragraphs
+  // and insert a blank paragraph after each so they are separated
   if (comments && comments.trim()) {
     const lines = comments.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
     const commentParts = [
@@ -396,7 +397,8 @@ async function exportFilledDocx(payload) {
       if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("In conclusion,")) {
         const rep = commentParts[idx] || "";
         idx++;
-        return setParagraphPlainText(p, rep);
+        const filled = setParagraphPlainText(p, rep);
+        return filled + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
       }
       return p;
     });

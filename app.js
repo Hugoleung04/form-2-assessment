@@ -884,12 +884,22 @@ function loadHistory(key) {
   }
 }
 
+function splitToSingles(value) {
+  return String(value || "")
+    .toLowerCase()
+    .split(/\s*,\s*|\s+and\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !/\sand\s/.test(s));
+}
+
 function saveHistory(key, value) {
-  const v = String(value || "").trim().toLowerCase();
-  if (!v) return;
-  const list = loadHistory(key);
-  const next = [v, ...list.filter((x) => x !== v)].slice(0, 30);
-  localStorage.setItem(key, JSON.stringify(next));
+  const parts = splitToSingles(value);
+  if (!parts.length) return;
+  const list = loadHistory(key).flatMap(splitToSingles);
+  const next = [...parts, ...list.filter((x) => !parts.includes(x))];
+  const uniq = [...new Set(next)].slice(0, 40);
+  localStorage.setItem(key, JSON.stringify(uniq));
 }
 
 function fillDatalist(listId, values) {
@@ -943,6 +953,14 @@ function renderChips(containerId, common, history, inputId) {
 }
 
 function refreshSuggestionLists() {
+  // Clean any previously saved combined values into singles
+  ["f2-site-history", "f2-nearby-history", "f2-targets-history"].forEach((key) => {
+    const raw = loadHistory(key);
+    const cleaned = [...new Set(raw.flatMap(splitToSingles))];
+    if (cleaned.length !== raw.length || cleaned.some((v, i) => v !== raw[i])) {
+      localStorage.setItem(key, JSON.stringify(cleaned));
+    }
+  });
   const siteHist = loadHistory("f2-site-history");
   const nearbyHist = loadHistory("f2-nearby-history");
   const targetsHist = loadHistory("f2-targets-history");
