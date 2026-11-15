@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1b4332">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Form 2">
+  <title>Form 2 Assessment</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <svg class="brand" viewBox="0 0 512 512" aria-hidden="true">
+        <rect width="512" height="512" rx="96" fill="#1b4332"/>
+        <circle cx="256" cy="256" r="188" fill="none" stroke="#d8f3dc" stroke-width="16"/>
+        <path d="M256 86 L272 230 L256 218 L240 230 Z" fill="#e63946"/>
+        <path d="M256 426 L240 282 L256 294 L272 282 Z" fill="#d8f3dc"/>
+        <circle cx="256" cy="256" r="14" fill="#95d5b2"/>
+      </svg>
+      <h1 data-i18n="app">Form 2 Assessment</h1>
+      <button class="lang-toggle" id="langBtn" type="button">中文</button>
+    </header>
+
+    <!-- HOME -->
+    <section class="screen active" id="screen-home">
+      <div class="card">
+        <h2 data-i18n="inspections">Inspections</h2>
+        <button class="btn" id="btnNew" type="button" data-i18n="newTree">New tree inspection</button>
+      </div>
+      <div class="list" id="inspectionList"></div>
+    </section>
+
+    <!-- TREE -->
+    <section class="screen" id="screen-tree">
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn secondary" id="btnBackHome" type="button" data-i18n="back">Back</button>
+        <button class="btn secondary" id="btnSaveTree" type="button" data-i18n="saveTree">Save tree & continue</button>
+      </div>
+      <div class="card">
+        <h2 data-i18n="treeInfo">Tree information</h2>
+        <div class="field">
+          <label data-i18n="treeId">Tree ID / tag</label>
+          <input id="f-treeId" autocomplete="off">
+        </div>
+        <div class="field species-field">
+          <label data-i18n="species">Species</label>
+          <input id="f-species" autocomplete="off" data-i18n-placeholder="speciesSearch">
+          <div class="suggest" id="speciesSuggest" hidden></div>
+        </div>
+        <div class="field">
+          <label data-i18n="site">Site / location</label>
+          <input id="f-site" autocomplete="off">
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label data-i18n="inspector">Inspector</label>
+            <input id="f-inspector" autocomplete="name">
+          </div>
+          <div class="field">
+            <label data-i18n="date">Date</label>
+            <input id="f-date" type="date">
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="notes">Notes</label>
+          <textarea id="f-notes"></textarea>
+        </div>
+        <div class="row spread" style="margin-bottom:10px">
+          <span class="status-pill" id="gpsLabel">No GPS yet</span>
+          <button class="btn secondary" id="btnGps" type="button" style="width:auto;min-height:42px;padding:8px 12px" data-i18n="gps">Capture GPS</button>
+        </div>
+        <h3 data-i18n="treePhotos">Tree photos (at least 1)</h3>
+        <div class="photos" id="treePhotos"></div>
+        <input class="hidden-file" id="fileTreePhoto" type="file" accept="image/*" capture="environment">
+        <button class="btn ghost" id="btnTreePhoto" type="button" style="margin-top:10px" data-i18n="addTreePhoto">Take / add tree photo</button>
+        <button class="btn secondary" type="button" style="margin-top:8px" data-stamp-toggle>Date/time stamp: ON</button>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn secondary" id="btnJson" type="button" data-i18n="exportJson">Backup JSON</button>
+        <button class="btn" id="btnExport" type="button" data-i18n="export">Export report</button>
+      </div>
+      <button class="btn danger" id="btnDeleteTree" type="button" style="margin-top:10px" data-i18n="delete">Delete</button>
+    </section>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="./jszip.min.js"></script>
+  <script src="./template-b64.js"></script>
+  <script src="./export-docx.js"></script>
+  <script src="./species-list.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

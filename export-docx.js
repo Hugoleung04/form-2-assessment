@@ -1,0 +1,464 @@
+/* Fill Resis-test.docx by string edits so Word can open the file. */
+
+const IMG_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const CM = 360000;
+
+const PHOTO_SIZE = {
+  tree: { wCm: 12.45, hCm: 16.6 },
+  drill1: { wCm: 4.15, hCm: 5.53 },
+  drill2: { wCm: 14.25, hCm: 10.69 },
+};
+
+function escapeXml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function speciesSciFirst(label) {
+  const s = String(label || "").trim();
+  const m = s.match(/^(.*)\(([^)]+)\)\s*$/);
+  if (!m) return s;
+  const outside = m[1].trim();
+  const inside = m[2].trim();
+  const insideSci = /[A-Za-z]/.test(inside);
+  const outsideChi = /[\u4e00-\u9fff]/.test(outside);
+  if (insideSci && outsideChi) return `${inside} (${outside})`;
+  return s;
+}
+
+function paraPlainText(pXml) {
+  let out = "";
+  const re = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+  let m;
+  while ((m = re.exec(pXml))) out += m[1];
+  return out.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+}
+
+function mapParagraphs(xml, fn) {
+  return xml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (p) => {
+    const next = fn(p, paraPlainText(p));
+    return next == null ? p : next;
+  });
+}
+
+function tnrRun(text) {
+  return (
+    `<w:r>` +
+    `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`
+  );
+}
+
+function rewriteFirstParagraph(xml, text) {
+  return xml.replace(/<w:p(?=[\s>])[\s\S]*?<\/w:p>/, (p) => {
+    const open = (p.match(/<w:p\b[^>]*>/) || ["<w:p>"])[0];
+    const pPr = (p.match(/<w:pPr[\s\S]*?<\/w:pPr>/) || [""])[0];
+    return `${open}${pPr}${tnrRun(text)}</w:p>`;
+  });
+}
+
+function setParagraphPlainText(pXml, text) {
+  return rewriteFirstParagraph(pXml, text);
+}
+
+function stripHighlights(xml) {
+  return xml
+    .replace(/<w:highlight\b[^/]*\/>/g, "")
+    .replace(/<w:highlight\b[^>]*>\s*<\/w:highlight>/g, "");
+}
+
+function nextRid(relsXml) {
+  let max = 0;
+  const re = /Id="rId(\d+)"/g;
+  let m;
+  while ((m = re.exec(relsXml))) max = Math.max(max, Number(m[1]));
+  return "rId" + (max + 1);
+}
+
+function addRel(relsXml, rid, mediaName) {
+  const tag = `<Relationship Id="${rid}" Type="${IMG_REL}" Target="media/${mediaName}"/>`;
+  if (relsXml.includes("</Relationships>")) {
+    return relsXml.replace("</Relationships>", tag + "</Relationships>");
+  }
+  return relsXml + tag;
+}
+
+function ensureJpegContentType(ctXml) {
+  if (/Extension="jpeg"/.test(ctXml)) return ctXml;
+  if (/Extension="png"/.test(ctXml)) {
+    return ctXml.replace(
+      '<Default Extension="png" ContentType="image/png"/>',
+      '<Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/>'
+    );
+  }
+  return ctXml.replace(
+    "<Types ",
+    '<Types '
+  ).replace(
+    ">",
+    '><Default Extension="jpeg" ContentType="image/jpeg"/>'
+  );
+}
+
+function imageParagraph(rid, widthCm, heightCm, name) {
+  const cx = Math.round(widthCm * CM);
+  const cy = Math.round(heightCm * CM);
+  const id = 2000 + Math.floor(Math.random() * 8000);
+  return (
+    `<w:p>` +
+    `<w:pPr><w:jc w:val="center"/></w:pPr>` +
+    `<w:r>` +
+    `<w:rPr><w:noProof/></w:rPr>` +
+    `<w:drawing>` +
+    `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/>` +
+    `<wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+    `<wp:docPr id="${id}" name="${escapeXml(name)}"/>` +
+    `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+    `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+    `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:nvPicPr><pic:cNvPr id="0" name="${escapeXml(name)}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+  );
+}
+
+function captionParagraph(text) {
+  return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${tnrRun(text || "")}</w:p>`;
+}
+
+function fitPhoto(photo, maxW, maxH) {
+  const ar = (photo && photo.w) && (photo.h) ? photo.w / photo.h : 4 / 3;
+  let w = maxW;
+  let h = w / ar;
+  if (h > maxH) {
+    h = maxH;
+    w = h * ar;
+  }
+  return { w: Math.round(w * 100) / 100, h: Math.round(h * 100) / 100 };
+}
+
+function cellOpenAndPr(cellXml) {
+  const open = (cellXml.match(/<w:tc\b[^>]*>/) || ["<w:tc>"])[0];
+  const tcPr = (cellXml.match(/<w:tcPr[\s\S]*?<\/w:tcPr>/) || [""])[0];
+  return { open, tcPr };
+}
+
+function rebuildCellWithPhoto(cellXml, imagePara, caption) {
+  const { open, tcPr } = cellOpenAndPr(cellXml);
+  return `${open}${tcPr}${imagePara || "<w:p/>"}${captionParagraph(caption)}</w:tc>`;
+}
+
+function clearPhotoCell(cellXml) {
+  const { open, tcPr } = cellOpenAndPr(cellXml);
+  return `${open}${tcPr}<w:p><w:pPr><w:jc w:val="center"/></w:pPr></w:p><w:p/></w:tc>`;
+}
+
+function fillPhotographicRecord(xml, photos, putImage) {
+  const marker = "Photographic Record";
+  const midx = xml.indexOf(marker);
+  if (midx < 0) return xml;
+  const re = /<w:tbl(?=[\s>])/g;
+  re.lastIndex = midx;
+  const found = re.exec(xml);
+  if (!found) return xml;
+  const start = found.index;
+  const end = xml.indexOf("</w:tbl>", start) + 8;
+  if (end <= start) return xml;
+  const tblXml = xml.slice(start, end);
+  const rows = splitRows(tblXml);
+  if (!rows.length) return xml;
+  const proto = rows[0];
+  const protoCells = splitCells(proto);
+  const cols = protoCells.length || 2;
+  const list = photos || [];
+  const needRows = Math.max(rows.length, Math.ceil(list.length / cols) || 1);
+  const built = [];
+  for (let r = 0; r < needRows; r++) {
+    const row = rows[r] || proto;
+    const cells = splitCells(row);
+    const newCells = [];
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const cell = cells[c] || protoCells[c] || cells[0];
+      const photo = list[idx];
+      if (photo && photo.bytes) {
+        const para = putImage(photo.bytes, `field_rec_${idx + 1}.jpeg`, 6.83, 9.1);
+        newCells.push(rebuildCellWithPhoto(cell, para, photo.caption || ""));
+      } else {
+        newCells.push(clearPhotoCell(cell));
+      }
+    }
+    const trOpen = (row.match(/<w:tr\b[^>]*>/) || ["<w:tr>"])[0];
+    const trPr = (row.match(/<w:trPr[\s\S]*?<\/w:trPr>/) || [""])[0];
+    built.push(`${trOpen}${trPr}${newCells.join("")}</w:tr>`);
+  }
+  const firstTr = tblXml.indexOf(rows[0]);
+  const lastEnd = tblXml.lastIndexOf("</w:tr>") + 7;
+  const rebuilt = tblXml.slice(0, firstTr) + built.join("") + tblXml.slice(lastEnd);
+  return xml.slice(0, start) + rebuilt + xml.slice(end);
+}
+
+function lastIndexOfOpenTbl(xml, idx) {
+  let pos = -1;
+  const re = /<w:tbl(?=[\s>])/g;
+  let m;
+  while ((m = re.exec(xml))) {
+    if (m.index >= idx) break;
+    pos = m.index;
+  }
+  return pos;
+}
+
+function extractTableContaining(xml, token) {
+  const idx = xml.indexOf(token);
+  if (idx < 0) return null;
+  const start = lastIndexOfOpenTbl(xml, idx);
+  const end = xml.indexOf("</w:tbl>", idx);
+  if (start < 0 || end < 0 || end < start) return null;
+  return { start, end: end + 8, xml: xml.slice(start, end + 8) };
+}
+
+function splitRows(tblXml) {
+  return tblXml.match(/<w:tr(?=[\s>])[\s\S]*?<\/w:tr>/g) || [];
+}
+
+function splitCells(rowXml) {
+  return rowXml.match(/<w:tc(?=[\s>])[\s\S]*?<\/w:tc>/g) || [];
+}
+
+function setCellText(cellXml, text) {
+  if (/<w:p(?=[\s>])/.test(cellXml)) return rewriteFirstParagraph(cellXml, text);
+  return cellXml.replace("</w:tc>", `<w:p>${tnrRun(text)}</w:p></w:tc>`);
+}
+
+function replaceRowCells(rowXml, valuesByIndex) {
+  const cells = splitCells(rowXml);
+  if (!cells.length) return rowXml;
+  let out = rowXml;
+  cells.forEach((cell, i) => {
+    if (valuesByIndex[i] == null) return;
+    const filled = setCellText(cell, valuesByIndex[i]);
+    out = out.replace(cell, filled);
+  });
+  return out;
+}
+
+function heightToCm(drill) {
+  if (!drill) return "";
+  const raw = String(drill.height ?? "").trim();
+  if (!raw) return "";
+  const n = Number(raw);
+  const unit = String(drill.unit || "cm").toLowerCase();
+  if (Number.isNaN(n)) return raw;
+  if (unit === "m") return String(Math.round(n * 1000) / 10);
+  if (unit === "mm") return String(Math.round((n / 10) * 10) / 10);
+  return raw;
+}
+
+function speedText(drill) {
+  if (!drill) return "";
+  const parts = [];
+  if (drill.feedSpeed) parts.push(`${drill.feedSpeed} cm/min`);
+  if (drill.drillSpeed) parts.push(`${drill.drillSpeed} r/min`);
+  return parts.join("; ");
+}
+
+function fillResistographyInfoTable(xml, drills) {
+  const tbl = extractTableContaining(xml, "Height of drill");
+  if (!tbl) return xml;
+  const rows = splitRows(tbl.xml);
+  if (rows.length < 2) return xml;
+  const header = rows[0];
+  const proto = rows[1];
+  const built = [header];
+  const count = Math.max(drills.length, rows.length - 1);
+  for (let i = 0; i < count; i++) {
+    const n = i + 1;
+    let row = rows[i + 1] || proto;
+    const drill = drills[i];
+    row = replaceRowCells(row, {
+      0: String(n),
+      1: drill ? drill.headingLabel || "" : "",
+      3: drill ? heightToCm(drill) : "",
+      5: drill ? speedText(drill) : "",
+    });
+    built.push(row);
+  }
+  const firstTr = tbl.xml.indexOf(header);
+  const lastTrEnd = tbl.xml.lastIndexOf("</w:tr>") + 7;
+  const rebuilt = tbl.xml.slice(0, firstTr) + built.join("") + tbl.xml.slice(lastTrEnd);
+  return xml.slice(0, tbl.start) + rebuilt + xml.slice(tbl.end);
+}
+
+function retargetTableXml(tblXml, fromN, toN) {
+  const from = String(fromN);
+  const to = String(toN);
+  const swap = (s) =>
+    s
+      .replaceAll(`@Drill ${from}_1`, `@Drill ${to}_1`)
+      .replaceAll(`@Drilling ${from}_2`, `@Drilling ${to}_2`)
+      .replaceAll(`@Drilling ${from}_3`, `@Drilling ${to}_3`)
+      .replaceAll(`Drill#${from}`, `Drill#${to}`)
+      .replaceAll(`Drill ${from}`, `Drill ${to}`)
+      .replaceAll(`drill ${from}`, `drill ${to}`)
+      .replaceAll(`drilling#${from}`, `drilling#${to}`)
+      .replaceAll(`rill ${from}`, `rill ${to}`);
+  tblXml = mapParagraphs(tblXml, (p, text) => {
+    const next = swap(text);
+    return next === text ? p : setParagraphPlainText(p, next);
+  });
+  return swap(tblXml);
+}
+
+async function loadTemplateArrayBuffer() {
+  if (typeof window.TEMPLATE_DOCX_B64 === "string" && window.TEMPLATE_DOCX_B64.length > 100) {
+    const bin = atob(window.TEMPLATE_DOCX_B64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+  const urls = [
+    new URL("./template/Resis-test.docx", document.baseURI || location.href).href,
+    "./template/Resis-test.docx",
+    "template/Resis-test.docx",
+  ];
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.arrayBuffer();
+      lastErr = new Error("Template HTTP " + res.status);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("Template not found");
+}
+
+async function exportFilledDocx(payload) {
+  if (typeof JSZip === "undefined") throw new Error("JSZip missing");
+  const buf = await loadTemplateArrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+  let xml = await zip.file("word/document.xml").async("string");
+  let rels = await zip.file("word/_rels/document.xml.rels").async("string");
+  let types = await zip.file("[Content_Types].xml").async("string");
+
+  xml = stripHighlights(xml);
+  types = ensureJpegContentType(types);
+
+  const treeId = payload.treeId || "";
+  const species = payload.species || "";
+  const location = payload.location || payload.site || "";
+  xml = mapParagraphs(xml, (p, text) => {
+    let next = text;
+    const compact = next.replace(/\s+/g, "");
+    if (compact === "@1" || next.includes("@1")) next = next.replaceAll("@1", treeId);
+    if (compact === "@2" || next.includes("@2")) next = next.replaceAll("@2", species);
+    if (treeId && next.includes("CW2670")) next = next.replaceAll("CW2670", treeId);
+    if (species && next.includes("Araucaria columnaris")) {
+      next = next.replaceAll("Araucaria columnaris", speciesSciFirst(species));
+    }
+    const titleish = next.replace(/\s+/g, " ").trim();
+    if (titleish === "( – )" || titleish === "(–)" || titleish === "(-)") {
+      const inner = [location, treeId].filter(Boolean).join(" – ");
+      if (inner) next = `( ${inner} )`;
+    }
+    if (next.includes("Table 2. Information of Resistography Test")) {
+      next = next.replaceAll("Table 2. Information of Resistography Test", "Table 1. Information of Resistography Test");
+    }
+    if (next.includes("(Table 2)")) next = next.replaceAll("(Table 2)", "(Table 1)");
+    if (next.includes("Resistography and Sonic Tomography Analysis")) {
+      next = next.replaceAll("Resistography and Sonic Tomography Analysis", "Resistography Analysis");
+    }
+    return next === text ? p : setParagraphPlainText(p, next);
+  });
+  xml = xml.replace(/>@1</g, ">" + escapeXml(treeId) + "<");
+  xml = xml.replace(/>@2</g, ">" + escapeXml(species) + "<");
+
+  function putImage(bytes, filename, wCm, hCm) {
+    zip.file("word/media/" + filename, bytes);
+    const rid = nextRid(rels);
+    rels = addRel(rels, rid, filename);
+    return imageParagraph(rid, wCm, hCm, filename);
+  }
+
+  if (payload.treePhoto && payload.treePhoto.bytes) {
+    const para = putImage(payload.treePhoto.bytes, "field_tree.jpeg", PHOTO_SIZE.tree.wCm, PHOTO_SIZE.tree.hCm);
+    xml = mapParagraphs(xml, (p, text) => (text.replace(/\s+/g, "") === "@3" || text.trim() === "@3" ? para : p));
+  }
+
+  xml = fillPhotographicRecord(xml, payload.treePhotos || [], putImage);
+
+  const drills = payload.drills || [];
+  if (drills.length) {
+    xml = fillResistographyInfoTable(xml, drills);
+    const proto = extractTableContaining(xml, "@Drill 1_1");
+    const tbl2 = extractTableContaining(xml, "@Drill 2_1");
+
+    if (proto && drills.length > 2) {
+      let extra = "";
+      for (let n = 3; n <= drills.length; n++) {
+        extra += `<w:p><w:r><w:t></w:t></w:r></w:p>` + retargetTableXml(proto.xml, 1, n);
+      }
+      if (tbl2) xml = xml.slice(0, tbl2.end) + extra + xml.slice(tbl2.end);
+      else xml = xml.replace("</w:body>", extra + "</w:body>");
+    }
+
+    function fillOneDrill(n, drill) {
+      if (!drill) {
+        xml = mapParagraphs(xml, (p, text) => {
+          if (text.includes(`@Drill ${n}_1`)) return setParagraphPlainText(p, "");
+          if (text.includes(`@Drilling ${n}_2`)) return setParagraphPlainText(p, "");
+          if (text.includes(`@Drilling ${n}_3`)) return setParagraphPlainText(p, text.replace(`@Drilling ${n}_3`, ""));
+          return p;
+        });
+        return;
+      }
+      const dir = drill.headingLabel || "";
+      xml = mapParagraphs(xml, (p, text) => {
+        if (text.includes(`@Drilling ${n}_3`)) {
+          return setParagraphPlainText(p, text.replace(`@Drilling ${n}_3`, dir));
+        }
+        if (text.includes(`@Drill ${n}_1`) && drill.photo1 && drill.photo1.bytes) {
+          return putImage(drill.photo1.bytes, `field_d${n}_1.jpeg`, PHOTO_SIZE.drill1.wCm, PHOTO_SIZE.drill1.hCm);
+        }
+        if (text.includes(`@Drilling ${n}_2`) && drill.photo2 && drill.photo2.bytes) {
+          return putImage(drill.photo2.bytes, `field_d${n}_2.jpeg`, PHOTO_SIZE.drill2.wCm, PHOTO_SIZE.drill2.hCm);
+        }
+        return p;
+      });
+    }
+
+    fillOneDrill(1, drills[0]);
+    fillOneDrill(2, drills[1]);
+    for (let n = 3; n <= drills.length; n++) fillOneDrill(n, drills[n - 1]);
+  }
+
+  zip.file("word/document.xml", xml);
+  zip.file("word/_rels/document.xml.rels", rels);
+  zip.file("[Content_Types].xml", types);
+
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+    createFolders: false,
+  });
+  const a = document.createElement("a");
+  const name = "resistograph-" + (payload.treeId || "tree").replace(/[^\w\-]+/g, "_") + ".docx";
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+window.exportFilledDocx = exportFilledDocx;
