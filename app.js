@@ -887,10 +887,11 @@ function loadHistory(key) {
 function splitToSingles(value) {
   return String(value || "")
     .toLowerCase()
+    .replace(/^\s*and\s+/g, "")
     .split(/\s*,\s*|\s+and\s+/)
-    .map((s) => s.trim())
+    .map((s) => s.replace(/^\s*and\s+/i, "").trim())
     .filter(Boolean)
-    .filter((s) => !/\sand\s/.test(s));
+    .filter((s) => !/^and\s/.test(s) && s !== "and");
 }
 
 function saveHistory(key, value) {
@@ -1053,6 +1054,8 @@ const PHOTO_CAPTION_OPTIONS = [
   "Trunk base condition",
 ];
 
+let captionOptionsVisible = false;
+
 async function renderTreePhotos(tree) {
   const wrap = document.getElementById("treePhotos");
   wrap.innerHTML = "";
@@ -1071,12 +1074,8 @@ async function renderTreePhotos(tree) {
         <button type="button" class="mini" data-act="next" ${i === ids.length - 1 ? "disabled" : ""}>${t("moveNext")}</button>
       </div>
       <img src="${url}" alt="">
-      <div class="row spread" style="align-items:center;margin:6px 0 4px">
-        <span class="small muted">${escapeHtml(t("photoCaption"))}</span>
-        <button type="button" class="btn secondary" data-cap-toggle style="width:auto;min-height:28px;padding:2px 8px;font-size:12px">Show options</button>
-      </div>
       <input class="caption-input" type="text" maxlength="120" placeholder="${escapeHtml(t("photoCaption"))}" value="${escapeHtml(cap)}">
-      <div class="chip-box" data-cap-chips hidden></div>`;
+      <div class="chip-box" data-cap-chips ${captionOptionsVisible ? "" : "hidden"}></div>`;
     const img = slot.querySelector("img");
     const input = slot.querySelector("input");
     img.addEventListener("click", async () => {
@@ -1108,19 +1107,12 @@ async function renderTreePhotos(tree) {
     input.addEventListener("change", saveCap);
     input.addEventListener("blur", saveCap);
 
-    const capToggle = slot.querySelector("[data-cap-toggle]");
     const capChips = slot.querySelector("[data-cap-chips]");
     const currentParts = cap.toLowerCase().split(/\s*,\s*|\s+and\s+/).map((p) => p.trim()).filter(Boolean);
     capChips.innerHTML = PHOTO_CAPTION_OPTIONS.map((opt) => {
       const sel = currentParts.includes(opt.toLowerCase()) ? " selected" : "";
       return `<button type="button" class="chip${sel}" data-val="${opt}">${opt}</button>`;
     }).join("");
-    capToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const show = capChips.hidden;
-      capChips.hidden = !show;
-      capToggle.textContent = show ? "Hide options" : "Show options";
-    });
     capChips.querySelectorAll(".chip").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1594,6 +1586,17 @@ async function init() {
     if (f) await handleTreePhoto(f);
   });
   document.getElementById("btnTreePhoto").addEventListener("click", () => document.getElementById("fileTreePhoto").click());
+  const capToggleBtn = document.getElementById("btnToggleCaptionOptions");
+  if (capToggleBtn) {
+    capToggleBtn.addEventListener("click", async () => {
+      captionOptionsVisible = !captionOptionsVisible;
+      capToggleBtn.textContent = captionOptionsVisible ? "Hide options" : "Show options";
+      if (currentTreeId) {
+        const tree = await getTree(currentTreeId);
+        if (tree) await renderTreePhotos(tree);
+      }
+    });
+  }
   document.querySelectorAll("[data-stamp-toggle]").forEach((btn) => {
     btn.addEventListener("click", toggleStamp);
   });

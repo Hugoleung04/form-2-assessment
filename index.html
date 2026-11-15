@@ -103,7 +103,10 @@
           <span class="status-pill" id="gpsLabel">No GPS yet</span>
           <button class="btn secondary" id="btnGps" type="button" style="width:auto;min-height:42px;padding:8px 12px" data-i18n="gps">Capture GPS</button>
         </div>
-        <h3 data-i18n="treePhotos">Tree photos (at least 1)</h3>
+        <div class="row spread" style="align-items:center;margin-bottom:6px">
+          <h3 data-i18n="treePhotos" style="margin:0">Tree photos (at least 1)</h3>
+          <button class="btn secondary" id="btnToggleCaptionOptions" type="button" style="width:auto;min-height:32px;padding:4px 10px;font-size:13px">Show options</button>
+        </div>
         <div class="photos" id="treePhotos"></div>
         <input class="hidden-file" id="fileTreePhoto" type="file" accept="image/*" capture="environment">
         <button class="btn ghost" id="btnTreePhoto" type="button" style="margin-top:10px" data-i18n="addTreePhoto">Take / add tree photo</button>
