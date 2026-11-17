@@ -1574,41 +1574,116 @@ async function dataUrlToBlob(dataUrl) {
   return await res.blob();
 }
 
-async function exportSelectedJson() {
+async function getSelectedTrees() {
   const checks = [...document.querySelectorAll(".tree-check:checked")];
   if (!checks.length) {
     toast("Select at least one tree");
-    return;
+    return [];
   }
-  const ids = checks.map((c) => c.getAttribute("data-id"));
   const trees = [];
-  for (const id of ids) {
-    const tree = await getTree(id);
+  for (const cb of checks) {
+    const tree = await getTree(cb.getAttribute("data-id"));
     if (tree) trees.push(tree);
   }
-  const photos = {};
-  const collect = async (id) => {
-    if (!id || photos[id]) return;
-    const rec = await getPhoto(id);
-    if (rec) photos[id] = await blobToDataUrl(rec.blob);
-  };
-  for (const tree of trees) {
-    for (const id of tree.treePhotoIds || []) await collect(id);
-    for (const d of tree.drills || []) for (const id of d.photoIds || []) await collect(id);
-  }
-  const payload = {
-    app: "form2-field-record",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    trees,
-    photos,
-  };
-  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+  return trees;
+}
+
+function downloadBlob(blob, name) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `form2-selected-${trees.length}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = name;
+  document.body.appendChild(a);
   a.click();
-  toast(`Exported ${trees.length} tree(s)`);
+  a.remove();
+}
+
+async function zipAndDownload(files, zipName) {
+  if (typeof JSZip === "undefined") {
+    toast("Zip not ready");
+    return;
+  }
+  const zip = new JSZip();
+  for (const f of files) zip.file(f.name, f.blob);
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  downloadBlob(blob, zipName);
+}
+
+async function exportSelectedJson() {
+  const trees = await getSelectedTrees();
+  if (!trees.length) return;
+  toast("Exporting…");
+  const files = [];
+  for (const tree of trees) {
+    const photos = {};
+    const collect = async (id) => {
+      if (!id || photos[id]) return;
+      const rec = await getPhoto(id);
+      if (rec) photos[id] = await blobToDataUrl(rec.blob);
+    };
+    for (const id of tree.treePhotoIds || []) await collect(id);
+    for (const d of tree.drills || []) for (const id of d.photoIds || []) await collect(id);
+    const payload = { app: "form2-field-record", version: 1, exportedAt: new Date().toISOString(), tree, photos };
+    const name = "Form 2-" + (tree.treeId || "tree").replace(/[^\w\-]+/g, "_") + ".json";
+    files.push({ name, blob: new Blob([JSON.stringify(payload)], { type: "application/json" }) });
+  }
+  if (files.length === 1) {
+    downloadBlob(files[0].blob, files[0].name);
+  } else {
+    await zipAndDownload(files, `Form 2-JSON-${files.length}-${new Date().toISOString().slice(0, 10)}.zip`);
+  }
+  toast(`Exported ${files.length} JSON`);
+}
+
+async function exportSelectedWord() {
+  const trees = await getSelectedTrees();
+  if (!trees.length) return;
+  if (typeof window.exportFilledDocx !== "function") {
+    toast("Word export not ready");
+    return;
+  }
+  toast("Exporting Word…");
+  const files = [];
+  for (const tree of trees) {
+    if (!tree.treePhotoIds || !tree.treePhotoIds.length) continue;
+    const first = await getPhoto(tree.treePhotoIds[0]);
+    const treePhoto = first && first.blob ? await blobToBytesAndSize(first.blob) : null;
+    const treePhotos = [];
+    for (const pid of tree.treePhotoIds || []) {
+      const rec = await getPhoto(pid);
+      if (rec && rec.blob) {
+        const sized = await blobToBytesAndSize(rec.blob);
+        treePhotos.push({
+          bytes: sized.bytes,
+          w: sized.w,
+          h: sized.h,
+          caption: (tree.treePhotoCaptions && tree.treePhotoCaptions[pid]) || "",
+        });
+      }
+    }
+    const result = await window.exportFilledDocx({
+      treeId: tree.treeId || "",
+      species: tree.species || "",
+      location: tree.site || "",
+      nearby: tree.nearby || "",
+      targets: tree.targets || "",
+      recommendation: tree.recommendation || "",
+      comments: tree.comments || "",
+      treePhoto,
+      treePhotos,
+      returnBlob: true,
+    });
+    if (result && result.blob) files.push(result);
+  }
+  if (!files.length) {
+    toast("No trees with photos to export");
+    return;
+  }
+  if (files.length === 1) {
+    downloadBlob(files[0].blob, files[0].name);
+  } else {
+    await zipAndDownload(files, `Form 2-Word-${files.length}-${new Date().toISOString().slice(0, 10)}.zip`);
+  }
+  toast(`Exported ${files.length} Word`);
 }
 
 function selectAllTrees() {
@@ -1697,6 +1772,8 @@ async function init() {
   document.getElementById("btnJson").addEventListener("click", exportJson);
   const btnExportSelected = document.getElementById("btnExportSelected");
   if (btnExportSelected) btnExportSelected.addEventListener("click", exportSelectedJson);
+  const btnExportWord = document.getElementById("btnExportWord");
+  if (btnExportWord) btnExportWord.addEventListener("click", exportSelectedWord);
   const btnSelectAll = document.getElementById("btnSelectAll");
   if (btnSelectAll) btnSelectAll.addEventListener("click", selectAllTrees);
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");

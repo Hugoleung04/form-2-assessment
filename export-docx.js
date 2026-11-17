@@ -511,8 +511,9 @@ async function exportFilledDocx(payload) {
     compressionOptions: { level: 6 },
     createFolders: false,
   });
-  const a = document.createElement("a");
   const name = "Form 2-" + (payload.treeId || "tree").replace(/[^\w\-]+/g, "_") + ".docx";
+  if (payload.returnBlob) return { blob, name };
+  const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = name;
   document.body.appendChild(a);
