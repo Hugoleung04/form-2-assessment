@@ -782,17 +782,23 @@ async function renderHome() {
     .map((tr) => {
       const photos = (tr.treePhotoIds || []).length;
       const when = tr.date || "";
-      return `<div class="item" data-open="${tr.id}">
-        <div class="title">${escapeHtml(tr.treeId || "—")} <span class="muted">· ${escapeHtml(tr.species || "")}</span></div>
-        <div class="small muted">${escapeHtml(tr.site || "")} ${when ? "· " + escapeHtml(when) : ""}</div>
-        <div style="margin-top:6px">
-          <span class="badge">${photos} ${t("photos")}</span>
+      return `<div class="item" style="display:flex;gap:10px;align-items:flex-start">
+        <input type="checkbox" class="tree-check" data-id="${tr.id}" style="width:22px;height:22px;margin-top:4px;flex:0 0 auto">
+        <div style="flex:1" data-open="${tr.id}">
+          <div class="title">${escapeHtml(tr.treeId || "—")} <span class="muted">· ${escapeHtml(tr.species || "")}</span></div>
+          <div class="small muted">${escapeHtml(tr.site || "")} ${when ? "· " + escapeHtml(when) : ""}</div>
+          <div style="margin-top:6px">
+            <span class="badge">${photos} ${t("photos")}</span>
+          </div>
         </div>
       </div>`;
     })
     .join("");
   list.querySelectorAll("[data-open]").forEach((el) => {
     el.addEventListener("click", () => openTree(el.getAttribute("data-open")));
+  });
+  list.querySelectorAll(".tree-check").forEach((cb) => {
+    cb.addEventListener("click", (e) => e.stopPropagation());
   });
 }
 
@@ -838,6 +844,7 @@ async function openTree(id) {
   document.getElementById("f-inspector").value = tree.inspector || "";
   document.getElementById("f-date").value = tree.date || "";
   document.getElementById("f-notes").value = tree.notes || "";
+  document.getElementById("f-recommendation").value = tree.recommendation || "";
   document.getElementById("f-comments").value = tree.comments || buildCommentsText(tree.treeId, tree.species, tree.site, tree.nearby, tree.targets);
   document.getElementById("gpsLabel").textContent = tree.gps
     ? `${tree.gps.lat.toFixed(6)}, ${tree.gps.lng.toFixed(6)}`
@@ -845,6 +852,19 @@ async function openTree(id) {
   refreshSuggestionLists();
   await renderTreePhotos(tree);
 }
+
+const RECOMMENDATION_OPTIONS = [
+  "Crown cleaning",
+  "Crown reduction",
+  "Crown raising",
+  "Regular crown size control",
+  "Re-inspection in 6 months",
+  "Keep monitoring",
+  "Tree removal",
+  "Resistography test",
+  "Sonic Tomography test",
+  "No mitigation measure is needed",
+];
 
 const COMMON_NEARBY = [
   "footpath",
@@ -924,16 +944,18 @@ function renderChips(containerId, common, history, inputId) {
   const seen = new Set();
   const items = [];
   for (const v of [...common, ...history]) {
-    const s = String(v || "").trim().toLowerCase();
-    if (!s || seen.has(s)) continue;
-    seen.add(s);
-    items.push({ v: s, hist: history.includes(s) });
+    const s = String(v || "").trim();
+    const key = s.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    items.push({ v: s, hist: history.includes(key) || history.includes(s) });
   }
-  const current = (document.getElementById(inputId)?.value || "").toLowerCase();
+  const current = document.getElementById(inputId)?.value || "";
   const currentParts = current.split(/\s*,\s*|\s+and\s+/).map((p) => p.trim()).filter(Boolean);
+  const known = new Set(items.map((it) => it.v.toLowerCase()));
   box.innerHTML = items
     .map((it) => {
-      const selected = currentParts.includes(it.v);
+      const selected = currentParts.some((p) => p.toLowerCase() === it.v.toLowerCase());
       return `<button type="button" class="chip${it.hist ? " chip-hist" : ""}${selected ? " selected" : ""}" data-val="${escapeHtml(it.v)}">${escapeHtml(it.v)}</button>`;
     })
     .join("");
@@ -945,8 +967,11 @@ function renderChips(containerId, common, history, inputId) {
       const selected = [...box.querySelectorAll(".chip.selected")].map((c) => c.getAttribute("data-val"));
       const input = document.getElementById(inputId);
       if (input) {
-        input.value = joinWithAnd(selected);
-        // Don't dispatch change here to avoid extra save loops; just save directly
+        // Re-read current value so typed content is not lost
+        const live = input.value || "";
+        const liveParts = live.split(/\s*,\s*|\s+and\s+/).map((p) => p.trim()).filter(Boolean);
+        const custom = liveParts.filter((p) => !known.has(p.toLowerCase()));
+        input.value = joinWithAnd([...custom, ...selected]);
         saveTreeFields();
       }
     });
@@ -968,17 +993,30 @@ function refreshSuggestionLists() {
   renderChips("siteChips", siteHist, [], "f-site");
   renderChips("nearbyChips", COMMON_NEARBY, nearbyHist, "f-nearby");
   renderChips("targetsChips", COMMON_TARGETS, targetsHist, "f-targets");
+  renderChips("recChips", RECOMMENDATION_OPTIONS, [], "f-recommendation");
+}
+
+function formatSpeciesForComments(label) {
+  const s = String(label || "").trim();
+  const m = s.match(/^(.*)\(([^)]+)\)\s*$/);
+  if (!m) return s;
+  const outside = m[1].trim();
+  const inside = m[2].trim();
+  const outsideChi = /[\u4e00-\u9fff]/.test(outside);
+  const insideSci = /[A-Za-z]/.test(inside) && !/[\u4e00-\u9fff]/.test(inside);
+  if (outsideChi && insideSci) return `${inside} (${outside})`;
+  return s;
 }
 
 function buildCommentsText(treeId, species, site, nearby, targets) {
   const id = treeId || "—";
-  const sp = species || "—";
+  const sp = formatSpeciesForComments(species) || "—";
   const s = site || "—";
   const n = nearby || "—";
   const t = targets || "—";
   return (
     `The inspected tree (${id}) is an ${sp} situated in the landscape area at ${s}. The tree is next to ${n}, which is considered frequently used. The targets of the tree cover ${t}.\n\n` +
-    `The overall condition of the tree was normal at the time of inspection, as evidenced by typical color, size, and density of the foliage. Structurally, no significant defects were observed along the main trunk and branches.\n\n` +
+    `The overall health condition of the tree was normal at the time of inspection, as evidenced by typical color, size, and density of the foliage. Structurally, no significant defects were observed along the main trunk and branches.\n\n` +
     `In conclusion, the overall health and structural condition of the tree are considered acceptable. No mitigation measure is needed at current stage.`
   );
 }
@@ -1004,6 +1042,7 @@ function readTreeForm() {
     inspector: read("f-inspector").trim(),
     date: read("f-date"),
     notes: read("f-notes").trim(),
+    recommendation: read("f-recommendation").trim(),
     comments: read("f-comments").trim(),
   };
 }
@@ -1024,6 +1063,7 @@ async function saveTreeFields() {
   tree.inspector = form.inspector || tree.inspector || "";
   tree.date = form.date || tree.date || "";
   tree.notes = form.notes || tree.notes || "";
+  tree.recommendation = form.recommendation || tree.recommendation || "";
   tree.comments = form.comments || tree.comments || "";
   tree.updatedAt = Date.now();
   if (tree.inspector) localStorage.setItem("rf-inspector", tree.inspector);
@@ -1409,6 +1449,7 @@ async function exportReport() {
       location: form.site || tree.site || "",
       nearby: form.nearby || tree.nearby || "",
       targets: form.targets || tree.targets || "",
+      recommendation: form.recommendation || tree.recommendation || "",
       comments: form.comments || tree.comments || "",
       treePhoto,
       treePhotos,
@@ -1528,7 +1569,106 @@ async function exportJson() {
   a.click();
 }
 
-/* ---------- Wire up ---------- */
+async function dataUrlToBlob(dataUrl) {
+  const res = await fetch(dataUrl);
+  return await res.blob();
+}
+
+async function exportSelectedJson() {
+  const checks = [...document.querySelectorAll(".tree-check:checked")];
+  if (!checks.length) {
+    toast("Select at least one tree");
+    return;
+  }
+  const ids = checks.map((c) => c.getAttribute("data-id"));
+  const trees = [];
+  for (const id of ids) {
+    const tree = await getTree(id);
+    if (tree) trees.push(tree);
+  }
+  const photos = {};
+  const collect = async (id) => {
+    if (!id || photos[id]) return;
+    const rec = await getPhoto(id);
+    if (rec) photos[id] = await blobToDataUrl(rec.blob);
+  };
+  for (const tree of trees) {
+    for (const id of tree.treePhotoIds || []) await collect(id);
+    for (const d of tree.drills || []) for (const id of d.photoIds || []) await collect(id);
+  }
+  const payload = {
+    app: "form2-field-record",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    trees,
+    photos,
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `form2-selected-${trees.length}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  toast(`Exported ${trees.length} tree(s)`);
+}
+
+function selectAllTrees() {
+  const checks = [...document.querySelectorAll(".tree-check")];
+  if (!checks.length) return;
+  const allOn = checks.every((c) => c.checked);
+  checks.forEach((c) => { c.checked = !allOn; });
+}
+
+async function deleteSelectedTrees() {
+  const checks = [...document.querySelectorAll(".tree-check:checked")];
+  if (!checks.length) {
+    toast("Select at least one tree");
+    return;
+  }
+  const n = checks.length;
+  if (!confirm(`Delete ${n} tree(s)? This cannot be undone.`)) return;
+  for (const cb of checks) {
+    const id = cb.getAttribute("data-id");
+    if (id) await deleteTree(id);
+  }
+  toast(`Deleted ${n} tree(s)`);
+  await renderHome();
+}
+
+async function importJsonFiles(fileList) {
+  const files = Array.isArray(fileList) ? fileList : [...fileList];
+  if (!files.length) return;
+  toast("Importing…");
+  let count = 0;
+  for (const file of files) {
+    let data;
+    try {
+      const text = await file.text();
+      data = JSON.parse(text);
+    } catch (err) {
+      toast("Invalid JSON: " + file.name);
+      continue;
+    }
+    const trees = Array.isArray(data.trees) ? data.trees : data.tree ? [data.tree] : [];
+    const photos = data.photos || {};
+    for (const tree of trees) {
+      if (!tree) continue;
+      if (!tree.id) tree.id = uid();
+      await putTree(tree);
+      count++;
+    }
+    for (const [id, dataUrl] of Object.entries(photos)) {
+      if (!dataUrl || typeof dataUrl !== "string") continue;
+      try {
+        const blob = await dataUrlToBlob(dataUrl);
+        await putPhoto(id, blob);
+      } catch (err) {
+        console.warn("photo import failed", id, err);
+      }
+    }
+  }
+  toast(`Imported ${count} tree(s) from ${files.length} file(s)`);
+  await renderHome();
+}
 
 async function init() {
   db = await openDb();
@@ -1548,13 +1688,38 @@ async function init() {
   document.getElementById("btnGps").addEventListener("click", captureGps);
   document.getElementById("btnDeleteTree").addEventListener("click", deleteCurrentTree);
   document.getElementById("btnExport").addEventListener("click", exportReport);
-  ["f-treeId", "f-species", "f-site", "f-nearby", "f-targets", "f-inspector", "f-date", "f-notes", "f-comments"].forEach((id) => {
+  ["f-treeId", "f-species", "f-site", "f-nearby", "f-targets", "f-inspector", "f-date", "f-notes", "f-recommendation", "f-comments"].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("change", () => saveTreeFields());
     el.addEventListener("blur", () => saveTreeFields());
   });
   document.getElementById("btnJson").addEventListener("click", exportJson);
+  const btnExportSelected = document.getElementById("btnExportSelected");
+  if (btnExportSelected) btnExportSelected.addEventListener("click", exportSelectedJson);
+  const btnSelectAll = document.getElementById("btnSelectAll");
+  if (btnSelectAll) btnSelectAll.addEventListener("click", selectAllTrees);
+  const btnDeleteSelected = document.getElementById("btnDeleteSelected");
+  if (btnDeleteSelected) btnDeleteSelected.addEventListener("click", deleteSelectedTrees);
+  const btnImport = document.getElementById("btnImport");
+  const fileImport = document.getElementById("fileImport");
+  if (btnImport && fileImport) {
+    btnImport.addEventListener("click", () => fileImport.click());
+    fileImport.addEventListener("change", async (e) => {
+      const files = e.target.files ? [...e.target.files] : [];
+      e.target.value = "";
+      if (!files.length) {
+        toast("No file selected");
+        return;
+      }
+      try {
+        await importJsonFiles(files);
+      } catch (err) {
+        console.error(err);
+        toast("Import failed: " + (err && err.message ? err.message : "unknown"));
+      }
+    });
+  }
   const refreshBtn = document.getElementById("btnRefreshComments");
   if (refreshBtn) {
     refreshBtn.addEventListener("click", () => {

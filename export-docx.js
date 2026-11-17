@@ -26,13 +26,36 @@ function capitalizeFirst(s) {
 function speciesSciFirst(label) {
   const s = String(label || "").trim();
   const m = s.match(/^(.*)\(([^)]+)\)\s*$/);
-  if (!m) return s;
+  if (!m) return { text: s, sci: "", chi: "" };
   const outside = m[1].trim();
   const inside = m[2].trim();
-  const insideSci = /[A-Za-z]/.test(inside);
+  const insideSci = /[A-Za-z]/.test(inside) && !/[\u4e00-\u9fff]/.test(inside);
   const outsideChi = /[\u4e00-\u9fff]/.test(outside);
-  if (insideSci && outsideChi) return `${inside} (${outside})`;
-  return s;
+  if (insideSci && outsideChi) return { text: `${inside} (${outside})`, sci: inside, chi: outside };
+  if (outsideChi && insideSci) return { text: `${inside} (${outside})`, sci: inside, chi: outside };
+  // already sci (chi)
+  if (/[A-Za-z]/.test(outside) && /[\u4e00-\u9fff]/.test(inside)) return { text: s, sci: outside, chi: inside };
+  return { text: s, sci: "", chi: "" };
+}
+
+function italicRun(text) {
+  return (
+    `<w:r>` +
+    `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:i/><w:iCs/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`
+  );
+}
+
+function paraWithItalicSpecies(plainText, sciName) {
+  // Build a paragraph where the scientific name is italicized
+  const open = `<w:p>`;
+  if (!sciName || !plainText.includes(sciName)) {
+    return `${open}${tnrRun(plainText)}</w:p>`;
+  }
+  const idx = plainText.indexOf(sciName);
+  const before = plainText.slice(0, idx);
+  const after = plainText.slice(idx + sciName.length);
+  return `${open}${tnrRun(before)}${italicRun(sciName)}${tnrRun(after)}</w:p>`;
 }
 
 function paraPlainText(pXml) {
@@ -184,7 +207,12 @@ function fillPhotographicRecord(xml, photos, putImage) {
   const protoCells = splitCells(proto);
   const cols = protoCells.length || 2;
   const list = photos || [];
-  const needRows = Math.max(rows.length, Math.ceil(list.length / cols) || 1);
+  const filled = list.filter((p) => p && p.bytes);
+  if (!filled.length) {
+    // no photos — remove the whole table
+    return xml.slice(0, start) + xml.slice(end);
+  }
+  const needRows = Math.ceil(filled.length / cols);
   const built = [];
   for (let r = 0; r < needRows; r++) {
     const row = rows[r] || proto;
@@ -193,14 +221,15 @@ function fillPhotographicRecord(xml, photos, putImage) {
     for (let c = 0; c < cols; c++) {
       const idx = r * cols + c;
       const cell = cells[c] || protoCells[c] || cells[0];
-      const photo = list[idx];
+      const photo = filled[idx];
       if (photo && photo.bytes) {
         const para = putImage(photo.bytes, `field_rec_${idx + 1}.jpeg`, 6.83, 9.1);
         newCells.push(rebuildCellWithPhoto(cell, para, photo.caption || ""));
-      } else {
-        newCells.push(clearPhotoCell(cell));
       }
+      // skip empty — do not add a blank cell
     }
+    if (!newCells.length) continue;
+    // if odd last cell, leave it out (row will have fewer cells)
     const trOpen = (row.match(/<w:tr\b[^>]*>/) || ["<w:tr>"])[0];
     const trPr = (row.match(/<w:trPr[\s\S]*?<\/w:trPr>/) || [""])[0];
     built.push(`${trOpen}${trPr}${newCells.join("")}</w:tr>`);
@@ -365,11 +394,15 @@ async function exportFilledDocx(payload) {
   const nearby = payload.nearby || "";
   const targets = payload.targets || "";
   const comments = payload.comments || "";
+  const recommendation = payload.recommendation || "";
 
   xml = mapParagraphs(xml, (p, text) => {
     let next = text;
     if (next.includes("{{TREE_ID}}")) next = next.replaceAll("{{TREE_ID}}", treeId || "—");
-    if (next.includes("{{SPECIES}}")) next = next.replaceAll("{{SPECIES}}", speciesSciFirst(species) || "—");
+    if (next.includes("{{SPECIES}}")) {
+      const sp = speciesSciFirst(species);
+      next = next.replaceAll("{{SPECIES}}", sp.text || "—");
+    }
     if (next.includes("{{SITE}}")) next = next.replaceAll("{{SITE}}", location || "—");
     if (next.includes("{{NEARBY}}")) next = next.replaceAll("{{NEARBY}}", nearby || "—");
     if (next.includes("{{TARGETS}}")) next = next.replaceAll("{{TARGETS}}", targets || "—");
@@ -378,6 +411,9 @@ async function exportFilledDocx(payload) {
       const loc = capitalizeFirst(location);
       const inner = [loc, treeId].filter(Boolean).join(" – ");
       if (inner) next = `(${inner})`;
+    }
+    if (/^Recommendation:\s*$/i.test(titleish) || /^Recommendation:\s*["“]?xxx["”]?/i.test(titleish)) {
+      next = recommendation ? `Recommendation: ${recommendation}` : "Recommendation: ";
     }
     return next === text ? p : setParagraphPlainText(p, next);
   });
@@ -394,10 +430,11 @@ async function exportFilledDocx(payload) {
     let idx = 0;
     xml = mapParagraphs(xml, (p, text) => {
       const plain = text.replace(/\s+/g, " ").trim();
-      if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("In conclusion,")) {
+      if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("The overall health condition of the tree") || plain.startsWith("In conclusion,")) {
         const rep = commentParts[idx] || "";
         idx++;
-        const filled = setParagraphPlainText(p, rep);
+        const sp = speciesSciFirst(species);
+        const filled = paraWithItalicSpecies(rep, sp.sci);
         return filled + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
       }
       return p;
@@ -475,7 +512,7 @@ async function exportFilledDocx(payload) {
     createFolders: false,
   });
   const a = document.createElement("a");
-  const name = "resistograph-" + (payload.treeId || "tree").replace(/[^\w\-]+/g, "_") + ".docx";
+  const name = "Form 2-" + (payload.treeId || "tree").replace(/[^\w\-]+/g, "_") + ".docx";
   a.href = URL.createObjectURL(blob);
   a.download = name;
   document.body.appendChild(a);
