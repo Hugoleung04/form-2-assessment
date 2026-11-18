@@ -773,7 +773,11 @@ async function renderHome() {
   showScreen("screen-home");
   currentTreeId = null;
   const list = document.getElementById("inspectionList");
-  const trees = (await allTrees()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const trees = (await allTrees()).sort((a, b) => {
+    const ao = a.order != null ? a.order : (a.updatedAt || 0);
+    const bo = b.order != null ? b.order : (b.updatedAt || 0);
+    return ao - bo;
+  });
   if (!trees.length) {
     list.innerHTML = `<div class="empty-state">${t("noRecords")}</div>`;
     return;
@@ -782,7 +786,7 @@ async function renderHome() {
     .map((tr) => {
       const photos = (tr.treePhotoIds || []).length;
       const when = tr.date || "";
-      return `<div class="item" style="display:flex;gap:10px;align-items:flex-start">
+      return `<div class="item" style="display:flex;gap:8px;align-items:flex-start" data-tree="${tr.id}">
         <input type="checkbox" class="tree-check" data-id="${tr.id}" style="width:22px;height:22px;margin-top:4px;flex:0 0 auto">
         <div style="flex:1" data-open="${tr.id}">
           <div class="title">${escapeHtml(tr.treeId || "—")} <span class="muted">· ${escapeHtml(tr.species || "")}</span></div>
@@ -802,6 +806,21 @@ async function renderHome() {
   });
 }
 
+function naturalCompare(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+async function sortTreesById() {
+  const trees = await allTrees();
+  trees.sort((a, b) => naturalCompare(a.treeId, b.treeId));
+  for (let i = 0; i < trees.length; i++) {
+    trees[i].order = i;
+    await putTree(trees[i]);
+  }
+  toast("Sorted by Tree ID");
+  await renderHome();
+}
+
 function escapeHtml(s) {
   return String(s || "")
     .replace(/&/g, "&amp;")
@@ -811,6 +830,8 @@ function escapeHtml(s) {
 }
 
 async function newTree() {
+  const existing = await allTrees();
+  const maxOrder = existing.reduce((m, t) => Math.max(m, t.order != null ? t.order : 0), -1);
   const tree = {
     id: uid(),
     treeId: "",
@@ -826,6 +847,7 @@ async function newTree() {
     treePhotoIds: [],
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    order: maxOrder + 1,
   };
   await putTree(tree);
   await openTree(tree.id);
@@ -1008,14 +1030,29 @@ function formatSpeciesForComments(label) {
   return s;
 }
 
+function titleCase(s) {
+  return String(s || "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
+
+function articleFor(name) {
+  const s = String(name || "").trim();
+  if (!s) return "a";
+  return /^[aeiou]/i.test(s) ? "an" : "a";
+}
+
 function buildCommentsText(treeId, species, site, nearby, targets) {
   const id = treeId || "—";
   const sp = formatSpeciesForComments(species) || "—";
-  const s = site || "—";
+  const art = articleFor(sp);
+  const s = titleCase(site) || "—";
   const n = nearby || "—";
   const t = targets || "—";
   return (
-    `The inspected tree (${id}) is an ${sp} situated in the landscape area at ${s}. The tree is next to ${n}, which is considered frequently used. The targets of the tree cover ${t}.\n\n` +
+    `The inspected tree (${id}) is ${art} ${sp} situated in the landscape area at ${s}. The tree is next to ${n}, which is considered frequently used. The targets of the tree cover ${t}.\n\n` +
     `The overall health condition of the tree was normal at the time of inspection, as evidenced by typical color, size, and density of the foliage. Structurally, no significant defects were observed along the main trunk and branches.\n\n` +
     `In conclusion, the overall health and structural condition of the tree are considered acceptable. No mitigation measure is needed at current stage.`
   );
@@ -1776,6 +1813,8 @@ async function init() {
   if (btnExportWord) btnExportWord.addEventListener("click", exportSelectedWord);
   const btnSelectAll = document.getElementById("btnSelectAll");
   if (btnSelectAll) btnSelectAll.addEventListener("click", selectAllTrees);
+  const btnSort = document.getElementById("btnSort");
+  if (btnSort) btnSort.addEventListener("click", sortTreesById);
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   if (btnDeleteSelected) btnDeleteSelected.addEventListener("click", deleteSelectedTrees);
   const btnImport = document.getElementById("btnImport");

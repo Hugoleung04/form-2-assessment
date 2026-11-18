@@ -17,6 +17,28 @@ function escapeXml(s) {
     .replace(/"/g, "&quot;");
 }
 
+function titleCase(s) {
+  return String(s || "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
+
+function boldRun(text) {
+  return (
+    `<w:r>` +
+    `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:b/><w:bCs/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`
+  );
+}
+
+function setParagraphBold(pXml, text) {
+  const open = (pXml.match(/<w:p\b[^>]*>/) || ["<w:p>"])[0];
+  const pPr = (pXml.match(/<w:pPr[\s\S]*?<\/w:pPr>/) || [""])[0];
+  return `${open}${pPr}${boldRun(text)}</w:p>`;
+}
+
 function capitalizeFirst(s) {
   const t = String(s || "").trim();
   if (!t) return "";
@@ -408,9 +430,11 @@ async function exportFilledDocx(payload) {
     if (next.includes("{{TARGETS}}")) next = next.replaceAll("{{TARGETS}}", targets || "—");
     const titleish = next.replace(/\s+/g, " ").trim();
     if (titleish === "( – )" || titleish === "(–)" || titleish === "(-)") {
-      const loc = capitalizeFirst(location);
+      const loc = titleCase(location);
       const inner = [loc, treeId].filter(Boolean).join(" – ");
-      if (inner) next = `(${inner})`;
+      if (inner) {
+        return setParagraphBold(p, `(${inner})`);
+      }
     }
     if (/^Recommendation:\s*$/i.test(titleish) || /^Recommendation:\s*["“]?xxx["”]?/i.test(titleish)) {
       next = recommendation ? `Recommendation: ${recommendation}` : "Recommendation: ";
@@ -418,27 +442,40 @@ async function exportFilledDocx(payload) {
     return next === text ? p : setParagraphPlainText(p, next);
   });
 
-  // If user provided custom comments, replace the three standard paragraphs
-  // and insert a blank paragraph after each so they are separated
+  // If user provided custom comments, replace the template paragraphs
+  // and append any extra paragraphs beyond the template slots
   if (comments && comments.trim()) {
     const lines = comments.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-    const commentParts = [
-      lines[0] || "",
-      lines[1] || "",
-      lines[2] || "",
-    ];
+    const sp = speciesSciFirst(species);
     let idx = 0;
+    let lastReplaced = null;
     xml = mapParagraphs(xml, (p, text) => {
       const plain = text.replace(/\s+/g, " ").trim();
       if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("The overall health condition of the tree") || plain.startsWith("In conclusion,")) {
-        const rep = commentParts[idx] || "";
+        const rep = lines[idx] || "";
         idx++;
-        const sp = speciesSciFirst(species);
         const filled = paraWithItalicSpecies(rep, sp.sci);
+        lastReplaced = filled;
         return filled + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
       }
       return p;
     });
+    // Append any remaining paragraphs after the last replaced slot
+    if (idx < lines.length && lastReplaced) {
+      let extra = "";
+      for (let i = idx; i < lines.length; i++) {
+        extra += paraWithItalicSpecies(lines[i], sp.sci) + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
+      }
+      // Insert extras before Photographic Record
+      const marker = "Photographic Record";
+      const midx = xml.indexOf(marker);
+      if (midx > 0) {
+        const pStart = xml.lastIndexOf("<w:p", midx);
+        if (pStart > 0) xml = xml.slice(0, pStart) + extra + xml.slice(pStart);
+      } else {
+        xml = xml.replace("</w:body>", extra + "</w:body>");
+      }
+    }
   }
 
   function putImage(bytes, filename, wCm, hCm) {
