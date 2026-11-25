@@ -447,33 +447,55 @@ async function exportFilledDocx(payload) {
   if (comments && comments.trim()) {
     const lines = comments.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
     const sp = speciesSciFirst(species);
-    let idx = 0;
-    let lastReplaced = null;
+    const isCommentSlot = (plain) =>
+      plain.startsWith("Comments:") ||
+      plain.startsWith("The overall condition of the tree") ||
+      plain.startsWith("The overall health condition of the tree") ||
+      plain.startsWith("In conclusion,");
+
+    let slotIdx = 0;
+    const blank = `<w:p><w:r><w:t></w:t></w:r></w:p>`;
     xml = mapParagraphs(xml, (p, text) => {
       const plain = text.replace(/\s+/g, " ").trim();
-      if (plain.startsWith("Comments:") || plain.startsWith("The overall condition of the tree") || plain.startsWith("The overall health condition of the tree") || plain.startsWith("In conclusion,")) {
-        const rep = lines[idx] || "";
-        idx++;
-        const filled = paraWithItalicSpecies(rep, sp.sci);
-        lastReplaced = filled;
-        return filled + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
+      if (isCommentSlot(plain)) {
+        const rep = lines[slotIdx] || "";
+        slotIdx++;
+        return paraWithItalicSpecies(rep, sp.sci) + blank;
       }
       return p;
     });
-    // Append any remaining paragraphs after the last replaced slot
-    if (idx < lines.length && lastReplaced) {
+
+    // Insert any extra paragraphs right after the last comment slot (and its blank line)
+    if (slotIdx < lines.length) {
       let extra = "";
-      for (let i = idx; i < lines.length; i++) {
-        extra += paraWithItalicSpecies(lines[i], sp.sci) + `<w:p><w:r><w:t></w:t></w:r></w:p>`;
+      for (let i = slotIdx; i < lines.length; i++) {
+        extra += paraWithItalicSpecies(lines[i], sp.sci) + blank;
       }
-      // Insert extras before Photographic Record
-      const marker = "Photographic Record";
-      const midx = xml.indexOf(marker);
-      if (midx > 0) {
-        const pStart = xml.lastIndexOf("<w:p", midx);
-        if (pStart > 0) xml = xml.slice(0, pStart) + extra + xml.slice(pStart);
+      // Find the last comment paragraph we just wrote, then skip past its following blank paragraph
+      const lastLine = lines[Math.min(slotIdx - 1, lines.length - 1)] || "";
+      if (lastLine && xml.includes(escapeXml(lastLine.slice(0, 30)))) {
+        const searchText = escapeXml(lastLine.slice(0, 40));
+        const tIdx = xml.indexOf(searchText);
+        if (tIdx > 0) {
+          const pEnd = xml.indexOf("</w:p>", tIdx);
+          if (pEnd > 0) {
+            // Skip past the blank paragraph that follows
+            let insertAt = pEnd + "</w:p>".length;
+            const after = xml.slice(insertAt, insertAt + 80);
+            if (after.startsWith(blank) || after.startsWith("<w:p><w:r><w:t></w:t></w:r></w:p>")) {
+              insertAt += blank.length;
+            }
+            xml = xml.slice(0, insertAt) + extra + xml.slice(insertAt);
+          }
+        }
       } else {
-        xml = xml.replace("</w:body>", extra + "</w:body>");
+        // Fallback: insert before Photographic Record paragraph
+        const marker = "Photographic Record";
+        const midx = xml.indexOf(marker);
+        if (midx > 0) {
+          const pStart = xml.lastIndexOf("<w:p", midx);
+          if (pStart > 0) xml = xml.slice(0, pStart) + extra + xml.slice(pStart);
+        }
       }
     }
   }

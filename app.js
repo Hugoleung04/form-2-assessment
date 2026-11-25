@@ -1149,20 +1149,19 @@ async function renderTreePhotos(tree) {
         <span class="order">#${i + 1}</span>
         <button type="button" class="mini" data-act="prev" ${i === 0 ? "disabled" : ""}>${t("movePrev")}</button>
         <button type="button" class="mini" data-act="next" ${i === ids.length - 1 ? "disabled" : ""}>${t("moveNext")}</button>
+        <button type="button" class="mini" data-act="del" style="color:#e76f51">${t("delete")}</button>
       </div>
       <img src="${url}" alt="">
       <input class="caption-input" type="text" maxlength="120" placeholder="${escapeHtml(t("photoCaption"))}" value="${escapeHtml(cap)}">
       <div class="chip-box" data-cap-chips ${captionOptionsVisible ? "" : "hidden"}></div>`;
     const img = slot.querySelector("img");
     const input = slot.querySelector("input");
-    img.addEventListener("click", async () => {
-      if (!confirm(t("delete") + "?")) return;
-      tree.treePhotoIds = tree.treePhotoIds.filter((x) => x !== pid);
-      if (tree.treePhotoCaptions) delete tree.treePhotoCaptions[pid];
-      await deletePhoto(pid);
-      tree.updatedAt = Date.now();
-      await putTree(tree);
-      await renderTreePhotos(tree);
+    img.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const overlay = document.getElementById("photoPreview");
+      const pimg = document.getElementById("previewImg");
+      pimg.src = url;
+      overlay.hidden = false;
     });
     slot.querySelector('[data-act="prev"]').addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1171,6 +1170,16 @@ async function renderTreePhotos(tree) {
     slot.querySelector('[data-act="next"]').addEventListener("click", (e) => {
       e.stopPropagation();
       moveTreePhoto(pid, 1);
+    });
+    slot.querySelector('[data-act="del"]').addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(t("delete") + "?")) return;
+      tree.treePhotoIds = tree.treePhotoIds.filter((x) => x !== pid);
+      if (tree.treePhotoCaptions) delete tree.treePhotoCaptions[pid];
+      await deletePhoto(pid);
+      tree.updatedAt = Date.now();
+      await putTree(tree);
+      await renderTreePhotos(tree);
     });
     const saveCap = async () => {
       const latest = await getTree(currentTreeId);
@@ -1882,6 +1891,13 @@ async function init() {
     btn.addEventListener("click", toggleStamp);
   });
   updateStampButtons();
+
+  const preview = document.getElementById("photoPreview");
+  const previewClose = document.getElementById("previewClose");
+  if (previewClose) previewClose.addEventListener("click", () => { preview.hidden = true; });
+  if (preview) preview.addEventListener("click", (e) => {
+    if (e.target === preview) preview.hidden = true;
+  });
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
